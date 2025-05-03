@@ -3,5 +3,5 @@ __pycache__/
 .venv
 logs
 screens
-
+gesture_teach.log
 venv/

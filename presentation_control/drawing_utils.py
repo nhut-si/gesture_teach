@@ -4,13 +4,7 @@ import cv2
 import numpy as np
 import json
 import logging
-import time # Keep time for potential future use
-
-# Thiết lập logging nếu cần (nếu file này được chạy riêng)
-# Ví dụ:
-# if __name__ == "__main__":
-#     log_format = '%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
-#     logging.basicConfig(level=logging.DEBUG, format=log_format, handlers=[logging.StreamHandler()])
+import time
 
 class DrawingCanvas:
     """Canvas for drawing on slides and webcam feed."""

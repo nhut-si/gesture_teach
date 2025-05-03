@@ -4,9 +4,9 @@ import numpy as np
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QLineEdit, QMessageBox, QListWidget, QListWidgetItem,
                              QFileDialog, QInputDialog, QDialog, QSlider, QComboBox, QTextEdit,
-                             QSizePolicy, QStatusBar, QGridLayout)
+                             QSizePolicy, QStatusBar, QGridLayout, QFrame, QSpacerItem) # Thêm QFrame, QSpacerItem
 from PyQt5.QtCore import Qt, QTimer, QByteArray, QBuffer
-from PyQt5.QtGui import QImage, QPixmap, QPainter
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QFont # Thêm QFont
 from database import Database
 import os
 import datetime
@@ -36,6 +36,10 @@ class AppGUI(QMainWindow):
         self.draw_location = "slide"
         self.current_gesture = None  # Last processed gesture name
         self.last_screenshot_time = 0  # Track the last screenshot time
+        self.current_username_input = None
+        self.current_email_input = None
+        self.current_password_input = None
+        self.auth_form_widget = None # Widget chứa form đăng nhập/đăng ký hiện tại
         self.init_ui()
 
         # Add a status bar
@@ -47,76 +51,88 @@ class AppGUI(QMainWindow):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.main_layout = QHBoxLayout(self.central_widget)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
 
         # === Sidebar ===
         self.sidebar_widget = QWidget()
         self.sidebar_widget.setFixedWidth(250)
+        self.sidebar_widget.setStyleSheet("background-color: #F9FAFB; border-right: 1px solid #E5E7EB;")
         self.sidebar_layout = QVBoxLayout(self.sidebar_widget)
+        self.sidebar_widget.setVisible(False)
 
         # Slide Set Management Widgets
         self.slide_set_label = QLabel("Slide Sets:")
+        self.slide_set_label.setStyleSheet("color: #374151; font-weight: bold; padding: 10px;")
         self.slide_set_list = QListWidget()
+        self.slide_set_list.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
         self.slide_set_list.itemClicked.connect(self.load_slides)  # Click to load set
         self.add_set_button = QPushButton("Add Slide Set")
         self.add_set_button.setFixedHeight(40)
+        self.add_set_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
         self.add_set_button.clicked.connect(self.add_slide_set)
         self.edit_set_button = QPushButton("Edit Slide Set")
         self.edit_set_button.setFixedHeight(40)
+        self.edit_set_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
         self.edit_set_button.clicked.connect(self.edit_slide_set)
         self.delete_set_button = QPushButton("Delete Slide Set")
         self.delete_set_button.setFixedHeight(40)
+        self.delete_set_button.setStyleSheet("background-color: #EF4444; color: white; border: none; padding: 5px;")
         self.delete_set_button.clicked.connect(self.delete_slide_set)
 
         # Slide List Widgets
         self.slide_list_label = QLabel("Slides in Set:")
+        self.slide_list_label.setStyleSheet("color: #374151; font-weight: bold; padding: 10px;")
         self.slide_list = QListWidget()
+        self.slide_list.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
         self.slide_list.itemClicked.connect(self.display_selected_slide)  # Click to display slide
 
         # Drawing Tool Widgets
         self.pen_button = QPushButton("Pen")
         self.pen_button.setFixedHeight(40)
-        self.pen_button.setCheckable(True)  # Make buttons checkable for visual feedback
-        self.pen_button.setChecked(True)  # Default tool
+        self.pen_button.setCheckable(True)
+        self.pen_button.setChecked(True)
+        self.pen_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
         self.pen_button.clicked.connect(lambda: self.set_drawing_mode("pen"))
         self.circle_button = QPushButton("Circle")
         self.circle_button.setFixedHeight(40)
         self.circle_button.setCheckable(True)
+        self.circle_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
         self.circle_button.clicked.connect(lambda: self.set_drawing_mode("circle"))
         self.square_button = QPushButton("Square")
         self.square_button.setFixedHeight(40)
         self.square_button.setCheckable(True)
+        self.square_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
         self.square_button.clicked.connect(lambda: self.set_drawing_mode("square"))
 
         # Brush Size Widgets
         self.brush_size_label = QLabel("Brush Size: 5")
+        self.brush_size_label.setStyleSheet("color: #374151; padding: 5px;")
         self.brush_size_slider = QSlider(Qt.Horizontal)
         self.brush_size_slider.setMinimum(1)
         self.brush_size_slider.setMaximum(50)
         self.brush_size_slider.setValue(5)
+        self.brush_size_slider.setStyleSheet("QSlider::groove:horizontal { background: #E5E7EB; height: 8px; } QSlider::handle:horizontal { background: #3B82F6; width: 18px; margin: -4px 0; border-radius: 9px; }")
         self.brush_size_slider.valueChanged.connect(self.update_brush_size)
-
-        # Opacity Widgets
-        self.opacity_label = QLabel("Opacity: 100%")
-        self.opacity_slider = QSlider(Qt.Horizontal)
-        self.opacity_slider.setMinimum(10)  # Min opacity 10%
-        self.opacity_slider.setMaximum(100)
-        self.opacity_slider.setValue(100)
-        self.opacity_slider.valueChanged.connect(self.update_opacity)
 
         # Draw Location Widgets
         self.draw_location_label = QLabel("Draw On:")
+        self.draw_location_label.setStyleSheet("color: #374151; font-weight: bold; padding: 10px;")
         self.draw_location_combo = QComboBox()
         self.draw_location_combo.addItems(["Slide", "Webcam", "Both"])
+        self.draw_location_combo.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
         self.draw_location_combo.currentTextChanged.connect(self.update_draw_location)
 
         # Other Sidebar Widgets
         self.usage_guide_button = QPushButton("Usage Guide")
         self.usage_guide_button.setFixedHeight(40)
+        self.usage_guide_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
         self.usage_guide_button.clicked.connect(self.show_usage_guide)
-        self.mode_label = QLabel("Mode: Unknown")  # Status labels
+        self.mode_label = QLabel("Mode: Unknown")
+        self.mode_label.setStyleSheet("color: #374151; padding: 5px;")
         self.color_label = QLabel("Color: Unknown")
+        self.color_label.setStyleSheet("color: #374151; padding: 5px;")
 
-        # Add Widgets to Sidebar Layout (Logical Order)
+        # Add Widgets to Sidebar Layout
         self.sidebar_layout.addWidget(self.slide_set_label)
         self.sidebar_layout.addWidget(self.slide_set_list)
         self.sidebar_layout.addWidget(self.add_set_button)
@@ -124,165 +140,161 @@ class AppGUI(QMainWindow):
         self.sidebar_layout.addWidget(self.delete_set_button)
         self.sidebar_layout.addWidget(self.slide_list_label)
         self.sidebar_layout.addWidget(self.slide_list)
-        self.sidebar_layout.addStretch(1)  # Spacer
+        self.sidebar_layout.addStretch(1)
         self.sidebar_layout.addWidget(QLabel("Drawing Tools:"))
-        tool_layout = QHBoxLayout()  # Layout for tool buttons
+        tool_layout = QHBoxLayout()
         tool_layout.addWidget(self.pen_button)
         tool_layout.addWidget(self.circle_button)
         tool_layout.addWidget(self.square_button)
         self.sidebar_layout.addLayout(tool_layout)
         self.sidebar_layout.addWidget(self.brush_size_label)
         self.sidebar_layout.addWidget(self.brush_size_slider)
-        self.sidebar_layout.addWidget(self.opacity_label)
-        self.sidebar_layout.addWidget(self.opacity_slider)
         self.sidebar_layout.addWidget(self.draw_location_label)
         self.sidebar_layout.addWidget(self.draw_location_combo)
-        self.sidebar_layout.addStretch(1)  # Spacer
+        self.sidebar_layout.addStretch(1)
         self.sidebar_layout.addWidget(self.usage_guide_button)
         self.sidebar_layout.addWidget(self.mode_label)
         self.sidebar_layout.addWidget(self.color_label)
 
-        self.sidebar_widget.setVisible(False)  # Initially hide sidebar
+        self.sidebar_widget.setVisible(False)
 
         # === Main Content Area ===
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setContentsMargins(5, 5, 5, 5)  # Add some margins
+        self.content_layout.setContentsMargins(0, 0, 0, 0) # Bỏ margin content layout
+        self.content_layout.setAlignment(Qt.AlignCenter) # Căn giữa nội dung
 
-        # Sidebar Toggle Button (Positioned above the main content)
+
+        # Sidebar Toggle Button
         self.sidebar_toggle_button = QPushButton("Hide Sidebar")
-        self.sidebar_toggle_button.setFixedHeight(30)  # Smaller button
+        self.sidebar_toggle_button.setFixedHeight(30)
+        self.sidebar_toggle_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
         self.sidebar_toggle_button.clicked.connect(self.toggle_sidebar)
-        self.sidebar_toggle_button.setVisible(False)  # Hide until logged in
+        self.sidebar_toggle_button.setVisible(False)
         self.content_layout.addWidget(self.sidebar_toggle_button)
 
         # --- Login Widget ---
         self.login_widget = QWidget()
         self.login_layout = QVBoxLayout(self.login_widget)
-        self.login_layout.setAlignment(Qt.AlignCenter)  # Center login elements
+        self.login_layout.setAlignment(Qt.AlignCenter)
         login_title = QLabel("<h2>GestureTeach Login</h2>")
+        login_title.setStyleSheet("color: #1E293B; padding: 10px;")
         login_title.setAlignment(Qt.AlignCenter)
         self.username_input = QLineEdit()
         self.username_input.setPlaceholderText("Username or Email")
         self.username_input.setFixedWidth(300)
+        self.username_input.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
         self.password_input = QLineEdit()
         self.password_input.setPlaceholderText("Password")
         self.password_input.setEchoMode(QLineEdit.Password)
         self.password_input.setFixedWidth(300)
+        self.password_input.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
         self.login_button = QPushButton("Login")
         self.login_button.setFixedHeight(40)
         self.login_button.setFixedWidth(150)
+        self.login_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
         self.login_button.clicked.connect(self.handle_login)
         self.register_button = QPushButton("Register New Account")
         self.register_button.setFixedHeight(40)
         self.register_button.setFixedWidth(200)
+        self.register_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
         self.register_button.clicked.connect(self.show_register)
         self.login_layout.addWidget(login_title)
         self.login_layout.addWidget(self.username_input)
         self.login_layout.addWidget(self.password_input)
         self.login_layout.addWidget(self.login_button)
         self.login_layout.addWidget(self.register_button)
-        self.content_layout.addWidget(self.login_widget)  # Add login widget first
+        self.content_layout.addWidget(self.login_widget)
 
-        # --- Main Application Widget (contains slide, buttons, webcam) ---
+        # --- Main Application Widget ---
         self.main_widget = QWidget()
         self.main_widget_layout = QVBoxLayout(self.main_widget)
-        self.main_widget_layout.setContentsMargins(0, 0, 0, 0)  # No internal margins
+        self.main_widget_layout.setContentsMargins(0, 0, 0, 0)
         self.main_widget_layout.setSpacing(5)
 
         # Top Area: Slide display and vertical buttons
         self.slide_area_layout = QHBoxLayout()
-        self.slide_label = QLabel()  # No default text
-        self.slide_label.setMinimumSize(640, 360)  # Minimum display size
-        self.slide_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # Allow expansion
+        self.slide_label = QLabel()
+        self.slide_label.setMinimumSize(640, 360)
+        self.slide_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.slide_label.setAlignment(Qt.AlignCenter)
-        self.slide_label.setStyleSheet("background-color: #333333; border: 1px solid gray;")  # Dark background initially
+        self.slide_label.setStyleSheet("background-color: #1E293B; border: 1px solid #E5E7EB;")
 
-        # Vertical Button Layout
         self.button_widget = QWidget()
         self.button_widget.setFixedWidth(150)
         self.button_layout = QVBoxLayout(self.button_widget)
-        self.button_layout.setContentsMargins(5, 0, 0, 0)  # Margin on the left
+        self.button_layout.setContentsMargins(5, 0, 0, 0)
         self.fullscreen_button = QPushButton("Full Screen")
         self.fullscreen_button.setFixedHeight(40)
+        self.fullscreen_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
         self.fullscreen_button.clicked.connect(self.toggle_fullscreen)
         self.screenshot_button = QPushButton("Take Screenshot")
         self.screenshot_button.setFixedHeight(40)
+        self.screenshot_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
         self.screenshot_button.clicked.connect(self.take_screenshot)
         self.blackboard_button = QPushButton("Blackboard: Off")
         self.blackboard_button.setFixedHeight(40)
-        self.blackboard_button.setCheckable(True)  # Make it checkable
+        self.blackboard_button.setCheckable(True)
+        self.blackboard_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
         self.blackboard_button.clicked.connect(self.toggle_blackboard_mode)
         self.button_layout.addWidget(self.fullscreen_button)
         self.button_layout.addWidget(self.screenshot_button)
         self.button_layout.addWidget(self.blackboard_button)
-        self.button_layout.addStretch()  # Push buttons up
+        self.button_layout.addStretch()
 
-        self.slide_area_layout.addWidget(self.slide_label, 1)  # Slide takes most space
+        self.slide_area_layout.addWidget(self.slide_label, 1)
         self.slide_area_layout.addWidget(self.button_widget)
-        self.main_widget_layout.addLayout(self.slide_area_layout, 1)  # Slide area stretches vertically
+        self.main_widget_layout.addLayout(self.slide_area_layout, 1)
 
         # Bottom Area: Webcam feed and Logout button
         self.bottom_widget = QWidget()
         self.bottom_layout = QHBoxLayout(self.bottom_widget)
-        self.bottom_layout.addStretch()  # Push webcam widget to the right
+        self.bottom_layout.addStretch()
         self.webcam_widget = QWidget()
         self.webcam_layout = QVBoxLayout(self.webcam_widget)
         self.webcam_label = QLabel("Webcam Feed")
         self.webcam_label.setFixedSize(320, 240)
         self.webcam_label.setAlignment(Qt.AlignCenter)
-        self.webcam_label.setStyleSheet("background-color: black; border: 1px solid gray;")
+        self.webcam_label.setStyleSheet("background-color: #1E293B; border: 1px solid #E5E7EB;")
         self.logout_button = QPushButton("Logout")
-        self.logout_button.setFixedHeight(30)  # Smaller logout button
+        self.logout_button.setFixedHeight(30)
+        self.logout_button.setStyleSheet("background-color: #EF4444; color: white; border: none; padding: 5px;")
         self.logout_button.clicked.connect(self.handle_logout)
         self.webcam_layout.addWidget(self.webcam_label)
-        self.webcam_layout.addWidget(self.logout_button, 0, Qt.AlignRight)  # Align button right
+        self.webcam_layout.addWidget(self.logout_button, 0, Qt.AlignRight)
         self.bottom_layout.addWidget(self.webcam_widget)
 
         self.main_widget_layout.addWidget(self.bottom_widget)
         self.content_layout.addWidget(self.main_widget)
-        self.main_widget.setVisible(False)  # Hide main widget initially
+        self.main_widget.setVisible(False)
 
         # Add sidebar and content area to the main horizontal layout
         self.main_layout.addWidget(self.sidebar_widget)
-        self.main_layout.addWidget(self.content_widget, 1)  # Content area takes remaining space
+        self.main_layout.addWidget(self.content_widget, 1)
 
-        # --- General Toast Notification Label (for non-screenshot messages) ---
+        # --- Toast Notification Labels ---
         self.toast_timer = QTimer()
         self.toast_timer.setSingleShot(True)
-        self.toast_label = QLabel(self)  # Use a persistent label, parented to main window
+        self.toast_label = QLabel(self)
         self.toast_label.setStyleSheet(
-            "background-color: rgba(50, 50, 50, 220); "  # Original gray background
-            "color: white; "
-            "padding: 8px 15px; "
-            "border-radius: 15px; "
-            "font-size: 10pt;"
+            "background-color: rgba(30, 41, 59, 0.9); color: white; padding: 8px 15px; border-radius: 8px; font-size: 12px;"
         )
         self.toast_label.setAlignment(Qt.AlignCenter)
         self.toast_label.setVisible(False)
-        self.toast_label.setAttribute(Qt.WA_TranslucentBackground)  # Optional: for better transparency effect
-        self.toast_timer.timeout.connect(self.hide_toast)  # Hide on timeout
+        self.toast_timer.timeout.connect(self.hide_toast)
 
-        # --- Screenshot Toast Notification Label (specific for screenshot) ---
         self.screenshot_toast_timer = QTimer()
         self.screenshot_toast_timer.setSingleShot(True)
-        self.screenshot_toast_label = QLabel(self)  # Separate label for screenshot toast
+        self.screenshot_toast_label = QLabel(self)
         self.screenshot_toast_label.setStyleSheet(
-            "background-color: #28a745; "  # Green background for screenshot toast
-            "color: #28a745; "  # Green text to match the theme
-            "padding: 8px 15px; "
-            "border: 2px solid white; "
-            "border-radius: 15px; "
-            "font-size: 14pt;"
+            "background-color: #10B981; color: white; padding: 8px 15px; border: 2px solid white; border-radius: 8px; font-size: 14px;"
         )
         self.screenshot_toast_label.setAlignment(Qt.AlignCenter)
         self.screenshot_toast_label.setVisible(False)
-        self.screenshot_toast_label.setAttribute(Qt.WA_TranslucentBackground)
-        self.screenshot_toast_timer.timeout.connect(self.hide_toast)  # Hide on timeout
+        self.screenshot_toast_timer.timeout.connect(self.hide_toast)
 
     def show_toast(self, message, duration=5000, is_screenshot=False):
         """Show a temporary toast notification at the appropriate position."""
-        # Choose the appropriate label and timer based on the message type
         if is_screenshot:
             toast_label = self.screenshot_toast_label
             toast_timer = self.screenshot_toast_timer
@@ -291,28 +303,25 @@ class AppGUI(QMainWindow):
             toast_timer = self.toast_timer
 
         toast_label.setText(message)
-        toast_label.adjustSize()  # Adjust size to fit text
+        toast_label.adjustSize()
 
-        # Calculate position based on message type
         try:
             parent_width = self.width()
             parent_height = self.height()
 
             if is_screenshot:
-                # Center horizontally, position at the bottom
-                toast_x = (parent_width - toast_label.width()) // 2  # Center horizontally
-                toast_y = parent_height - toast_label.height() - 20  # Bottom, with 20px offset
+                toast_x = (parent_width - toast_label.width()) // 2
+                toast_y = parent_height - toast_label.height() - 20
             else:
-                # Keep other toasts at the top-right
                 toast_x = parent_width - toast_label.width() - 20
-                toast_y = 20  # Top-right, offset from top
+                toast_y = 20
 
             toast_label.move(toast_x, toast_y)
-            toast_label.raise_()  # Ensure it's on top
+            toast_label.raise_()
             toast_label.setVisible(True)
             toast_timer.start(duration)
         except Exception as e:
-            logging.error(f"Error showing toast: {e}")  # Log error if positioning fails
+            logging.error(f"Error showing toast: {e}")
 
     def hide_toast(self):
         """Hide both toast labels."""
@@ -322,24 +331,21 @@ class AppGUI(QMainWindow):
     def resizeEvent(self, event):
         """Handle window resize event to reposition both toasts."""
         super().resizeEvent(event)
-        # Reposition general toast if it's visible (top-right)
         if self.toast_label.isVisible():
             try:
                 parent_width = self.width()
-                parent_height = self.height()
                 toast_x = parent_width - self.toast_label.width() - 20
-                toast_y = 20  # Top-right
+                toast_y = 20
                 self.toast_label.move(toast_x, toast_y)
             except Exception as e:
                 logging.error(f"Error repositioning general toast on resize: {e}")
 
-        # Reposition screenshot toast if it's visible (center-bottom)
         if self.screenshot_toast_label.isVisible():
             try:
                 parent_width = self.width()
                 parent_height = self.height()
-                toast_x = (parent_width - self.screenshot_toast_label.width()) // 2  # Center horizontally
-                toast_y = parent_height - self.screenshot_toast_label.height() - 20  # Bottom
+                toast_x = (parent_width - self.screenshot_toast_label.width()) // 2
+                toast_y = parent_height - self.screenshot_toast_label.height() - 20
                 self.screenshot_toast_label.move(toast_x, toast_y)
             except Exception as e:
                 logging.error(f"Error repositioning screenshot toast on resize: {e}")
@@ -357,22 +363,18 @@ class AppGUI(QMainWindow):
         if user_id:
             self.current_user_id = user_id
             self.login_widget.setVisible(False)
-            if hasattr(self, 'register_widget'):  # Hide register widget if it exists
+            if hasattr(self, 'register_widget'):
                 self.register_widget.setVisible(False)
             self.main_widget.setVisible(True)
-            self.sidebar_widget.setVisible(self.sidebar_visible)  # Show sidebar based on state
-            self.sidebar_toggle_button.setVisible(True)  # Show toggle button
-            self.update_sidebar_toggle_text()  # Set correct text
+            self.sidebar_widget.setVisible(self.sidebar_visible)
+            self.sidebar_toggle_button.setVisible(True)
+            self.update_sidebar_toggle_text()
             self.load_slide_sets()
-            self.statusBar().showMessage(f"Logged in as user ID: {self.current_user_id}")  # Show User ID or username
+            self.statusBar().showMessage(f"Logged in as user ID: {self.current_user_id}")
             self.show_toast("Login successful")
-            logging.info(f"User {self.current_user_id} logged in.")
-            # Clear password field after successful login
             self.password_input.clear()
         else:
             QMessageBox.warning(self, "Login Failed", "Invalid username/email or password.")
-            logging.warning(f"Failed login attempt for user: {username}")
-            # Clear password field after failed login
             self.password_input.clear()
 
     def handle_logout(self):
@@ -382,7 +384,6 @@ class AppGUI(QMainWindow):
         if reply == QMessageBox.No:
             return
 
-        # Attempt to save annotations before logging out
         self.save_current_annotations()
 
         user_id = self.current_user_id
@@ -391,16 +392,15 @@ class AppGUI(QMainWindow):
         self.sidebar_widget.setVisible(False)
         self.sidebar_toggle_button.setVisible(False)
         self.login_widget.setVisible(True)
-        self.username_input.clear()  # Clear username for next login
-        # Password already cleared on login success/fail
+        self.username_input.clear()
+        self.password_input.clear()
 
-        # Clear slide display and lists
         self.slide_label.clear()
         self.slide_label.setText("Login to view slides")
-        self.slide_label.setStyleSheet("background-color: #333333; border: 1px solid gray;")
+        self.slide_label.setStyleSheet("background-color: #1E293B; border: 1px solid #E5E7EB;")
         self.webcam_label.clear()
         self.webcam_label.setText("Webcam Feed")
-        self.webcam_label.setStyleSheet("background-color: black; border: 1px solid gray;")
+        self.webcam_label.setStyleSheet("background-color: #1E293B; border: 1px solid #E5E7EB;")
         self.slide_set_list.clear()
         self.slide_list.clear()
         self.slides = []
@@ -410,41 +410,44 @@ class AppGUI(QMainWindow):
         self.current_slide_with_drawings = None
         if self.drawing_canvas:
             self.drawing_canvas.clear_canvas()
-            self.drawing_canvas.current_annotations = []  # Clear temp list
+            self.drawing_canvas.current_annotations = []
 
         self.statusBar().showMessage("Logged out. Please log in.")
         self.show_toast("Logged out successfully")
-        logging.info(f"User {user_id} logged out.")
 
     # --- Registration Handling ---
     def show_register(self):
         """Show registration interface."""
         self.login_widget.setVisible(False)
-        # Create register widget only if it doesn't exist
         if not hasattr(self, 'register_widget'):
             self.register_widget = QWidget()
             self.register_layout = QVBoxLayout(self.register_widget)
             self.register_layout.setAlignment(Qt.AlignCenter)
             reg_title = QLabel("<h2>Register New Account</h2>")
+            reg_title.setStyleSheet("color: #1E293B; padding: 10px;")
             reg_title.setAlignment(Qt.AlignCenter)
             self.reg_username = QLineEdit()
             self.reg_username.setPlaceholderText("Username")
             self.reg_username.setFixedWidth(300)
+            self.reg_username.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
             self.reg_email = QLineEdit()
             self.reg_email.setPlaceholderText("Email")
             self.reg_email.setFixedWidth(300)
+            self.reg_email.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
             self.reg_password = QLineEdit()
-            pwd_placeholder = "Password (min 8 chars, A-Z, a-z, 0-9, symbol)"
-            self.reg_password.setPlaceholderText(pwd_placeholder)
+            self.reg_password.setPlaceholderText("Password (min 8 chars, A-Z, a-z, 0-9, symbol)")
             self.reg_password.setEchoMode(QLineEdit.Password)
             self.reg_password.setFixedWidth(300)
+            self.reg_password.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
             self.reg_button = QPushButton("Register")
             self.reg_button.setFixedHeight(40)
             self.reg_button.setFixedWidth(150)
+            self.reg_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
             self.reg_button.clicked.connect(self.handle_register)
             self.back_button = QPushButton("Back to Login")
             self.back_button.setFixedHeight(40)
             self.back_button.setFixedWidth(150)
+            self.back_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
             self.back_button.clicked.connect(self.show_login)
             self.register_layout.addWidget(reg_title)
             self.register_layout.addWidget(self.reg_username)
@@ -452,11 +455,9 @@ class AppGUI(QMainWindow):
             self.register_layout.addWidget(self.reg_password)
             self.register_layout.addWidget(self.reg_button)
             self.register_layout.addWidget(self.back_button)
-            # Add register widget to the *content* layout, not directly to main window
             self.content_layout.addWidget(self.register_widget)
-            self.register_widget.setVisible(False)  # Start hidden
+            self.register_widget.setVisible(False)
 
-        # Clear fields before showing
         self.reg_username.clear()
         self.reg_email.clear()
         self.reg_password.clear()
@@ -472,30 +473,25 @@ class AppGUI(QMainWindow):
             QMessageBox.warning(self, "Registration Error", "All fields are required.")
             return
 
-        # Basic email format validation
-        if not re.match(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):  # Stricter regex
+        if not re.match(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
             QMessageBox.warning(self, "Registration Error", "Invalid email format.")
             return
 
-        # Password complexity validation
         if not (len(password) >= 8 and
                 re.search(r"[A-Z]", password) and
                 re.search(r"[a-z]", password) and
                 re.search(r"[0-9]", password) and
-                re.search(r"[!@#$%^&*(),.?\":{}|<>]", password)):  # Example symbols
+                re.search(r"[!@#$%^&*(),.?\":{}|<>]", password)):
             QMessageBox.warning(self, "Registration Error", "Password does not meet complexity requirements.\n(Min 8 chars, uppercase, lowercase, number, symbol)")
             return
 
-        # Attempt registration
         success, message = self.db.register_user(username, email, password)
 
         if success:
             QMessageBox.information(self, "Success", "Registration successful! You can now log in.")
-            logging.info(f"New user registered: {username}, Email: {email}")
-            self.show_login()  # Go back to login screen
+            self.show_login()
         else:
             QMessageBox.warning(self, "Registration Failed", f"Registration failed: {message}")
-            logging.error(f"Registration failed for user: {username}. Reason: {message}")
 
     def show_login(self):
         """Show login interface and hide registration."""
@@ -531,12 +527,8 @@ class AppGUI(QMainWindow):
                     if errors:
                         msg += f"\nCould not add: {', '.join(errors)}"
                     QMessageBox.information(self, "Success", msg)
-                    self.load_slide_sets()  # Refresh list
+                    self.load_slide_sets()
                     self.show_toast(f"Slide set '{name}' added")
-                    logging.info(f"User {self.current_user_id} added slide set '{name}' ({set_id}) with {added_count} slides.")
-                else:
-                    QMessageBox.warning(self, "Error", "Failed to create slide set in database.")
-                    logging.error(f"Failed to add slide set '{name}' for user {self.current_user_id}")
 
     def edit_slide_set(self):
         """Edit slides within an existing slide set."""
@@ -548,28 +540,30 @@ class AppGUI(QMainWindow):
         set_id = selected_set_item.data(Qt.UserRole)
         set_name = selected_set_item.text()
 
-        # Create a dialog for editing
         dialog = QDialog(self)
         dialog.setWindowTitle(f"Edit Slides in Set: {set_name}")
         dialog.setMinimumSize(400, 300)
+        dialog.setStyleSheet("background-color: #F9FAFB; border: 1px solid #E5E7EB;")
         dialog_layout = QVBoxLayout(dialog)
 
         list_label = QLabel("Current Slides (Drag to Reorder - Future Feature):")
+        list_label.setStyleSheet("color: #374151; font-weight: bold; padding: 10px;")
         slide_list_widget = QListWidget()
+        slide_list_widget.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
 
-        # Populate the list
-        current_slides = self.db.get_slides(set_id)  # [(id, path, order), ...]
-        slide_map = {}  # Map list item text back to slide_id and path for removal
+        current_slides = self.db.get_slides(set_id)
+        slide_map = {}
         for slide_data in current_slides:
             slide_id_db, file_path, order_index = slide_data
             item_text = f"{order_index + 1}: {os.path.basename(file_path)}"
             list_item = QListWidgetItem(item_text)
-            slide_map[item_text] = (slide_id_db, file_path)  # Store DB ID and full path
+            slide_map[item_text] = (slide_id_db, file_path)
             slide_list_widget.addItem(list_item)
 
-        # Buttons for Add/Remove
         add_button = QPushButton("Add Slides...")
+        add_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
         remove_button = QPushButton("Remove Selected Slide")
+        remove_button.setStyleSheet("background-color: #EF4444; color: white; border: none; padding: 5px;")
 
         def add_new_slides():
             file_paths, _ = QFileDialog.getOpenFileNames(dialog, f"Add Slides to '{set_name}'", "", "Images (*.png *.jpg *.jpeg *.bmp)")
@@ -605,11 +599,6 @@ class AppGUI(QMainWindow):
                         self.show_toast("Slide removed.")
                         dialog.accept()
                         self.load_slides(selected_set_item)
-                    else:
-                        QMessageBox.warning(dialog, "Error", "Failed to remove slide from database.")
-                        logging.error(f"Failed to remove slide ID {slide_id_to_remove}")
-            else:
-                QMessageBox.warning(dialog, "Error", "Could not identify selected slide for removal.")
 
         add_button.clicked.connect(add_new_slides)
         remove_button.clicked.connect(remove_selected_slide)
@@ -617,11 +606,9 @@ class AppGUI(QMainWindow):
         button_layout = QHBoxLayout()
         button_layout.addWidget(add_button)
         button_layout.addWidget(remove_button)
-
         dialog_layout.addWidget(list_label)
         dialog_layout.addWidget(slide_list_widget)
         dialog_layout.addLayout(button_layout)
-
         dialog.exec_()
 
     def delete_slide_set(self):
@@ -640,11 +627,7 @@ class AppGUI(QMainWindow):
         if reply == QMessageBox.Yes:
             if self.db.delete_slide_set(set_id):
                 self.show_toast(f"Slide set '{set_name}' deleted.")
-                logging.info(f"User {self.current_user_id} deleted slide set '{set_name}' ({set_id})")
                 self.load_slide_sets()
-            else:
-                QMessageBox.warning(self, "Error", f"Failed to delete slide set '{set_name}'.")
-                logging.error(f"Failed to delete slide set {set_id} for user {self.current_user_id}")
 
     # --- Slide Loading and Display ---
     def load_slide_sets(self):
@@ -660,7 +643,7 @@ class AppGUI(QMainWindow):
         self.current_set_id = None
         self.slide_label.clear()
         self.slide_label.setText("Select a slide set")
-        self.slide_label.setStyleSheet("background-color: #333333; border: 1px solid gray;")
+        self.slide_label.setStyleSheet("background-color: #1E293B; border: 1px solid #E5E7EB;")
         if self.drawing_canvas:
             self.drawing_canvas.clear_canvas()
             self.drawing_canvas.current_annotations = []
@@ -701,16 +684,14 @@ class AppGUI(QMainWindow):
             self.original_slide_image = None
             self.slide_label.clear()
             self.slide_label.setText(f"Set '{set_name}' is empty.")
-            self.slide_label.setStyleSheet("background-color: #333333; border: 1px solid gray;")
+            self.slide_label.setStyleSheet("background-color: #1E293B; border: 1px solid #E5E7EB;")
             self.current_slide_index = -1
             if self.drawing_canvas:
                 self.drawing_canvas.clear_canvas()
                 self.drawing_canvas.current_annotations = []
             self.statusBar().showMessage(f"Selected empty set: '{set_name}'.")
-            logging.info(f"Loaded empty slide set '{set_name}' ({set_id}) for user {self.current_user_id}")
             return
 
-        logging.info(f"Loading {len(self.slides)} slides for set '{set_name}' ({set_id})")
         loaded_count = 0
         error_loading = False
         for i, slide_data in enumerate(self.slides):
@@ -732,7 +713,6 @@ class AppGUI(QMainWindow):
                 slide_item = QListWidgetItem(list_text)
                 slide_item.setForeground(Qt.red)
                 self.slide_list.addItem(slide_item)
-                logging.warning(f"Failed to load slide image: {file_path} for set {set_id}. Error: {e}")
                 error_loading = True
 
         if loaded_count > 0:
@@ -746,10 +726,8 @@ class AppGUI(QMainWindow):
             self.original_slide_image = None
             self.slide_label.clear()
             self.slide_label.setText(f"Error loading all slides in set '{set_name}'.")
-            self.slide_label.setStyleSheet("background-color: #FFDDDD; border: 1px solid red;")
+            self.slide_label.setStyleSheet("background-color: #1E293B; border: 1px solid #E5E7EB;")
             self.current_slide_index = -1
-            self.statusBar().showMessage(f"Error loading set '{set_name}'.")
-            logging.error(f"Failed to load any slides for set '{set_name}' ({set_id})")
             if self.drawing_canvas:
                 self.drawing_canvas.clear_canvas()
                 self.drawing_canvas.current_annotations = []
@@ -776,7 +754,7 @@ class AppGUI(QMainWindow):
             self.original_slide_image = None
             self.slide_label.clear()
             self.slide_label.setText("No slide selected or available.")
-            self.slide_label.setStyleSheet("background-color: #333333; border: 1px solid gray;")
+            self.slide_label.setStyleSheet("background-color: #1E293B; border: 1px solid #E5E7EB;")
             if self.drawing_canvas:
                 self.drawing_canvas.clear_canvas()
                 self.drawing_canvas.current_annotations = []
@@ -788,11 +766,10 @@ class AppGUI(QMainWindow):
             self.original_slide_image = None
             slide_path = self.slides[self.current_slide_index][1]
             self.slide_label.setText(f"Error: Cannot load slide\n{os.path.basename(slide_path)}")
-            self.slide_label.setStyleSheet("background-color: #FFDDDD; border: 1px solid red;")
+            self.slide_label.setStyleSheet("background-color: #1E293B; border: 1px solid #E5E7EB;")
             if self.drawing_canvas:
                 self.drawing_canvas.clear_canvas()
                 self.drawing_canvas.current_annotations = []
-            logging.error(f"Attempted to display slide index {self.current_slide_index} which failed to load.")
             return
 
         target_w, target_h = 1920, 1080
@@ -802,10 +779,9 @@ class AppGUI(QMainWindow):
             else:
                 self.original_slide_image = img_original.copy()
         except cv2.error as e:
-            logging.error(f"Error resizing slide {self.current_slide_index}: {e}")
             self.original_slide_image = None
             self.slide_label.setText("Error processing slide image.")
-            self.slide_label.setStyleSheet("background-color: #FFDDDD; border: 1px solid red;")
+            self.slide_label.setStyleSheet("background-color: #1E293B; border: 1px solid #E5E7EB;")
             return
 
         if self.drawing_canvas and self.current_user_id:
@@ -814,14 +790,9 @@ class AppGUI(QMainWindow):
                 try:
                     annotations = self.db.load_annotations(slide_id, self.current_user_id)
                     self.drawing_canvas.load_annotations(annotations)
-                    logging.info(f"Loaded {len(annotations)} annotations for slide {slide_id}")
                 except Exception as e:
-                    logging.error(f"Error loading annotations for slide {slide_id}: {e}")
                     QMessageBox.warning(self, "Annotation Error", f"Failed to load annotations for slide {slide_id}.")
                     self.drawing_canvas.clear_canvas()
-            else:
-                logging.warning("Cannot load annotations: Invalid slide_id.")
-                self.drawing_canvas.clear_canvas()
 
         display_image = self.prepare_display_image(self.original_slide_image)
         self.update_slide_label(display_image)
@@ -829,7 +800,6 @@ class AppGUI(QMainWindow):
     def prepare_display_image(self, base_image):
         """Combines the base slide image with blackboard effect and drawings using masking."""
         if base_image is None or base_image.size == 0:
-            logging.warning("prepare_display_image called with invalid base_image.")
             return None
 
         try:
@@ -852,30 +822,26 @@ class AppGUI(QMainWindow):
                         img_bg = cv2.bitwise_and(img_to_display, img_to_display, mask=mask_inv)
                         img_fg = cv2.bitwise_and(canvas_combined, canvas_combined, mask=mask)
                         img_to_display = cv2.add(img_bg, img_fg)
-                else:
-                    logging.warning("Dimension/dtype mismatch preventing drawing overlay (masked).")
 
+            self.current_slide_with_drawings = img_to_display.copy()
             return img_to_display
 
         except cv2.error as e:
-            logging.error(f"OpenCV error in prepare_display_image (masked): {e}")
             return base_image
         except Exception as e:
-            logging.error(f"Unexpected error in prepare_display_image (masked): {e}")
             return None
 
     def update_slide_label(self, bgr_image):
         """Updates the slide QLabel with the given BGR image."""
         if bgr_image is None or bgr_image.size == 0:
             self.slide_label.setText("Error displaying slide.")
-            self.slide_label.setStyleSheet("background-color: #FFDDDD; border: 1px solid red;")
+            self.slide_label.setStyleSheet("background-color: #1E293B; border: 1px solid #E5E7EB;")
             return
 
         try:
             img_rgb = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
             h, w, ch = img_rgb.shape
             if h <= 0 or w <= 0:
-                logging.error("Invalid image dimensions for QImage.")
                 self.slide_label.setText("Invalid Image.")
                 return
 
@@ -884,12 +850,10 @@ class AppGUI(QMainWindow):
             pixmap = QPixmap.fromImage(q_img)
             scaled_pixmap = pixmap.scaled(self.slide_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self.slide_label.setPixmap(scaled_pixmap)
-            self.slide_label.setStyleSheet("background-color: transparent; border: 1px solid gray;")
-
+            self.slide_label.setStyleSheet("background-color: transparent; border: 1px solid #E5E7EB;")
         except Exception as e:
-            logging.error(f"Error updating slide label: {e}")
             self.slide_label.setText("Slide Display Error.")
-            self.slide_label.setStyleSheet("background-color: #FFDDDD; border: 1px solid red;")
+            self.slide_label.setStyleSheet("background-color: #1E293B; border: 1px solid #E5E7EB;")
 
     def navigate_slide(self, direction):
         """Navigate to the next (+1) or previous (-1) slide."""
@@ -910,7 +874,6 @@ class AppGUI(QMainWindow):
             self.statusBar().showMessage(f"Slide {self.current_slide_index + 1}/{len(self.slides)}")
             return True
         else:
-            current_status = self.statusBar().currentMessage()
             if direction > 0:
                 self.statusBar().showMessage("Already on the last slide.", 2000)
             else:
@@ -944,7 +907,6 @@ class AppGUI(QMainWindow):
 
         QTimer.singleShot(50, self.display_slide)
         self.show_toast("Fullscreen " + ("enabled" if self.is_fullscreen else "disabled"))
-        logging.info(f"Fullscreen toggled: {'ON' if self.is_fullscreen else 'OFF'}")
 
     def toggle_blackboard_mode(self):
         """Toggle blackboard mode."""
@@ -954,15 +916,12 @@ class AppGUI(QMainWindow):
         display_image = self.prepare_display_image(self.original_slide_image)
         self.update_slide_label(display_image)
         self.show_toast(f"Blackboard mode {'enabled' if self.blackboard_mode else 'disabled'}")
-        logging.info(f"Blackboard mode toggled: {'ON' if self.blackboard_mode else 'OFF'}")
 
     def take_screenshot(self):
         """Capture and save a screenshot of the current slide with drawings to the 'screens' folder."""
-        # Check if enough time has passed since the last screenshot (1 second cooldown)
         current_time = time.time()
         if current_time - self.last_screenshot_time < 1.0:
-            self.show_toast("Chụp màn hình quá nhanh! Vui lòng đợi 1 giây.", duration=2000, is_screenshot=True)
-            logging.info("Screenshot attempt ignored: Cooldown period active.")
+            self.show_toast("Chụp màn hình quá nhanh! Vui lòng đợi.", duration=1500, is_screenshot=False)
             return
 
         image_to_save = self.current_slide_with_drawings
@@ -971,25 +930,25 @@ class AppGUI(QMainWindow):
             QMessageBox.warning(self, "Screenshot Error", "No slide content to capture.")
             return
 
-        # Create 'screens' directory if it doesn't exist
-        if not os.path.exists("screens"):
-            os.makedirs("screens")
-
-        # Generate filename with timestamp
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"screens/screenshot_{timestamp}.png"
-
-        # Save the image with correct color representation
+        screens_dir = "screens"
         try:
-            # Ensure the image is in RGB format and colors are preserved
-            img_rgb = cv2.cvtColor(image_to_save, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB for consistency
-            cv2.imwrite(filename, cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR))  # Save as BGR to match OpenCV's default
-            self.last_screenshot_time = current_time  # Update the last screenshot time
-            logging.info(f"Screenshot saved to {filename}")
-            self.show_toast("Đã chụp màn hình", duration=5000, is_screenshot=True)
+            if not os.path.exists(screens_dir):
+                os.makedirs(screens_dir)
+        except OSError as e:
+            QMessageBox.critical(self, "Directory Error", f"Could not create screenshot directory:\n{screens_dir}\nPlease check permissions.")
+            return
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = os.path.join(screens_dir, f"screenshot_{timestamp}.png")
+
+        try:
+            success = cv2.imwrite(filename, image_to_save)
+            if not success:
+                raise IOError("cv2.imwrite returned False")
+            self.last_screenshot_time = current_time
+            self.show_toast("Đã chụp màn hình", duration=3000, is_screenshot=True)
         except Exception as e:
-            logging.error(f"Error saving screenshot to {filename}: {e}")
-            QMessageBox.warning(self, "Screenshot Error", "Failed to save screenshot.")
+            QMessageBox.warning(self, "Screenshot Error", f"Failed to save screenshot.\nError: {e}")
 
     # --- Sidebar Toggle ---
     def toggle_sidebar(self):
@@ -1046,12 +1005,10 @@ class AppGUI(QMainWindow):
             pixmap = QPixmap.fromImage(q_img)
             self.webcam_label.setPixmap(pixmap.scaled(self.webcam_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
         except Exception as e:
-            logging.error(f"Error updating webcam frame: {e}")
             self.webcam_label.setText("Webcam Error")
 
     def update_slide(self, img):
         """Update the slide display with the combined image from main loop."""
-        self.current_slide_with_drawings = img
         self.update_slide_label(img)
 
     # --- Getters and Setters ---
@@ -1068,7 +1025,6 @@ class AppGUI(QMainWindow):
         self.drawing_canvas = canvas
         if self.drawing_canvas:
             self.update_brush_size()
-            self.update_opacity()
 
     # --- Drawing Interaction ---
     def set_drawing_mode(self, mode):
@@ -1086,13 +1042,6 @@ class AppGUI(QMainWindow):
         if self.drawing_canvas:
             self.drawing_canvas.set_brush_size(size)
 
-    def update_opacity(self):
-        """Update opacity in DrawingCanvas and label."""
-        opacity_percent = self.opacity_slider.value()
-        self.opacity_label.setText(f"Opacity: {opacity_percent}%")
-        if self.drawing_canvas:
-            self.drawing_canvas.set_opacity(opacity_percent)
-
     def update_draw_location(self):
         """Update drawing location preference."""
         self.draw_location = self.draw_location_combo.currentText().lower()
@@ -1104,28 +1053,15 @@ class AppGUI(QMainWindow):
         if self.current_user_id and self.drawing_canvas and self.slides and 0 <= self.current_slide_index < len(self.slides):
             slide_id = self.slides[self.current_slide_index][0]
             if not slide_id:
-                logging.warning("Cannot save annotations: Invalid slide_id for current index.")
                 return
 
             annotations_to_save = self.drawing_canvas.current_annotations
             if annotations_to_save:
-                saved_count = 0
-                failed_count = 0
-                try:
-                    for annotation in list(annotations_to_save):
-                        if self.db.save_annotation(slide_id, self.current_user_id, annotation):
-                            saved_count += 1
-                        else:
-                            failed_count += 1
-                            logging.error(f"Failed to save one annotation part for slide {slide_id}")
-                    if saved_count > 0:
-                        logging.info(f"Saved {saved_count} annotation parts for slide {slide_id}.")
-                    if failed_count > 0:
-                        logging.warning(f"Failed to save {failed_count} annotation parts for slide {slide_id}.")
-                    self.drawing_canvas.current_annotations = []
-                except Exception as e:
-                    logging.error(f"Error during bulk annotation saving for slide {slide_id}: {e}")
-                    self.drawing_canvas.current_annotations = []
+                temp_list = list(annotations_to_save)
+                self.drawing_canvas.current_annotations = []
+                for annotation in temp_list:
+                    if not self.db.save_annotation(slide_id, self.current_user_id, annotation):
+                        self.drawing_canvas.current_annotations.append(annotation)
 
     # --- Usage Guide ---
     def show_usage_guide(self):
@@ -1133,6 +1069,7 @@ class AppGUI(QMainWindow):
         dialog = QDialog(self)
         dialog.setWindowTitle("GestureTeach Usage Guide")
         dialog.setMinimumSize(500, 400)
+        dialog.setStyleSheet("background-color: #F9FAFB; border: 1px solid #E5E7EB;")
         layout = QVBoxLayout(dialog)
 
         guide_text = QTextEdit()
@@ -1157,7 +1094,7 @@ class AppGUI(QMainWindow):
                 <li><b>Draw/Shape Drag:</b> Index finger only (position of tip).</li>
                 <li><b>Change Color Cycle:</b> All 5 fingers up.</li>
                 <li><b>Select Tool:</b> Use sidebar buttons (Pen, Circle, Square).</li>
-                <li><b>Adjust Size/Opacity:</b> Use sidebar sliders.</li>
+                <li><b>Adjust Size:</b> Use sidebar sliders.</li>
                 <li><b>Change Draw Target:</b> Use sidebar dropdown (Slide, Webcam, Both).</li>
             </ul>
             <h3>Erasing Mode Actions</h3>
@@ -1177,9 +1114,13 @@ class AppGUI(QMainWindow):
         layout.addWidget(guide_text)
 
         close_button = QPushButton("Close")
-        close_button.clicked.connect(dialog.close)
-        layout.addWidget(close_button)
-
+        close_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
+        close_button.clicked.connect(dialog.accept)
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(close_button)
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
         dialog.show()
 
     # --- Window Close Event ---
@@ -1191,24 +1132,29 @@ class AppGUI(QMainWindow):
 
         if reply == QMessageBox.Yes:
             self.save_current_annotations()
-            logging.info("GUI closing by user action.")
             event.accept()
         else:
             event.ignore()
 
-# --- Standalone execution for testing GUI ---
 if __name__ == "__main__":
+    log_format = '%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
+    logging.basicConfig(level=logging.DEBUG,
+                        format=log_format,
+                        handlers=[logging.StreamHandler(sys.stdout)])
+
     class MockDatabase:
         def login_user(self, u, p): return 1 if p == "test" else None
         def get_slide_sets(self, uid): return [(1, "Demo Set 1"), (2, "Empty Set")]
         def get_slides(self, sid):
+            dummy_dir = "dummy_slides_test_gui"
+            os.makedirs(dummy_dir, exist_ok=True)
+            dummy_path1 = os.path.join(dummy_dir, "dummy_slide1.png")
+            dummy_path2 = os.path.join(dummy_dir, "dummy_slide2.jpg")
+            if not os.path.exists(dummy_path1):
+                cv2.imwrite(dummy_path1, np.zeros((100, 100, 3), dtype=np.uint8) + 200)
+            if not os.path.exists(dummy_path2):
+                cv2.imwrite(dummy_path2, np.zeros((100, 100, 3), dtype=np.uint8) + 100)
             if sid == 1:
-                dummy_path1 = "dummy_slide1.png"
-                dummy_path2 = "dummy_slide2.jpg"
-                if not os.path.exists(dummy_path1):
-                    cv2.imwrite(dummy_path1, np.zeros((100, 100, 3), dtype=np.uint8) + 200)
-                if not os.path.exists(dummy_path2):
-                    cv2.imwrite(dummy_path2, np.zeros((100, 100, 3), dtype=np.uint8) + 100)
                 return [(101, dummy_path1, 0), (102, dummy_path2, 1)]
             else:
                 return []
@@ -1219,7 +1165,7 @@ if __name__ == "__main__":
         def remove_slide_by_id(self, sid): return True
         def load_annotations(self, sid, uid): return []
         def save_annotation(self, sid, uid, d): return True
-        def close(self): print("Mock DB closed")
+        def close(self): pass
 
     app = QApplication(sys.argv)
     mock_db = MockDatabase()
@@ -1228,21 +1174,11 @@ if __name__ == "__main__":
     class MockDrawingCanvas:
         def __init__(self):
             self.canvas = np.zeros((1080, 1920, 3), dtype=np.uint8)
-            self.webcam_canvas = np.zeros((720, 1280, 3), dtype=np.uint8)
-            self.preview_canvas = np.zeros((1080, 1920, 3), dtype=np.uint8)
-            self.webcam_preview_canvas = np.zeros((720, 1280, 3), dtype=np.uint8)
-            self.current_annotations = []
+            self.current_annotations = [{'type':'mock_initial'}]
         def set_brush_size(self, s): pass
-        def set_opacity(self, o): pass
-        def clear_canvas(self):
-            self.canvas.fill(0)
-            self.webcam_canvas.fill(0)
-            self.preview_canvas.fill(0)
-            self.webcam_preview_canvas.fill(0)
-            self.current_annotations = []
+        def clear_canvas(self): self.canvas.fill(0)
         def load_annotations(self, a): self.clear_canvas()
-        def get_preview(self): return self.preview_canvas
-        def get_webcam_preview(self): return self.webcam_preview_canvas
+        def get_preview(self): return np.zeros((1080, 1920, 3), dtype=np.uint8)
 
     mock_canvas = MockDrawingCanvas()
     window.set_drawing_canvas(mock_canvas)

@@ -1,3 +1,5 @@
+import sys
+import os
 import cv2
 import numpy as np
 import time
@@ -5,11 +7,10 @@ from hand_detector import HandDetector
 from gesture_control import GestureController, PRESENTATION_MODE, DRAWING_MODE, ERASING_MODE
 from drawing_utils import DrawingCanvas
 # SlideController is removed
-from ui.gui import AppGUI # Ensure 'ui' is the correct package/folder name
+from ui.gui import AppGUI
 from database import Database
 from PyQt5.QtWidgets import QApplication, QMessageBox
 from PyQt5.QtCore import QTimer
-import sys
 import logging
 
 class MainApp:
@@ -30,9 +31,17 @@ class MainApp:
         self.cap = cv2.VideoCapture(0) # Try default camera first
         if not self.cap.isOpened():
              # Try alternative camera indices if default fails? Optional.
-             QMessageBox.critical(self.gui, "Webcam Error", "Failed to open default webcam (index 0).\nCheck if it is connected and not used by another application.")
-             logging.critical("Failed to open webcam (index 0).")
-             sys.exit(1)
+             logging.warning("Default webcam (index 0) not found. Trying index 1...")
+             self.cap = cv2.VideoCapture(1)
+             if not self.cap.isOpened():
+                 QMessageBox.critical(self.gui, "Webcam Error", "Failed to open default webcam (index 0 or 1).\nCheck if it is connected and not used by another application.")
+                 logging.critical("Failed to open webcam (index 0 or 1).")
+                 sys.exit(1)
+             else:
+                  logging.info("Using webcam index 1.")
+        else:
+            logging.info("Using default webcam index 0.")
+
 
         # Set desired webcam resolution (use constants)
         self.WEBCAM_WIDTH = 1280
@@ -45,8 +54,11 @@ class MainApp:
         if actual_width != self.WEBCAM_WIDTH or actual_height != self.WEBCAM_HEIGHT:
              logging.warning(f"Webcam resolution set to {actual_width}x{actual_height}, requested {self.WEBCAM_WIDTH}x{self.WEBCAM_HEIGHT}.")
              # Update dimensions if they differ significantly?
-             # self.WEBCAM_WIDTH = int(actual_width)
-             # self.WEBCAM_HEIGHT = int(actual_height)
+             self.WEBCAM_WIDTH = int(actual_width)
+             self.WEBCAM_HEIGHT = int(actual_height)
+        else:
+             logging.info(f"Webcam resolution set to {self.WEBCAM_WIDTH}x{self.WEBCAM_HEIGHT}.")
+
 
         # Hand Detection and Gesture Control Initialization
         self.detector = HandDetector(min_detection_confidence=0.8, max_hands=1) # Detect one hand for simplicity
@@ -65,7 +77,7 @@ class MainApp:
         self.last_color_change_time = 0 # Specific cooldown for color change
         self.color_change_delay = 0.7   # Cooldown for color change
         self.last_draw_action_time = 0  # Tracks continuity for drawing/erasing
-        # self.draw_start_delay = 0.1   # Minimal delay before drawing starts? Maybe not needed.
+        self.min_draw_interval = 0.02   # Throttling for drawing
 
         self.last_mode = None           # Track previous mode for logging/state changes
         self.frame_count = 0
@@ -94,15 +106,15 @@ class MainApp:
 
         self.frame_count += 1
         if self.frame_count % self.frame_skip != 0:
-            return # Skip frame processing
+             # Read frame even if skipping to clear buffer
+             success, _ = self.cap.read()
+             return # Skip frame processing
 
         # --- Read Webcam Frame ---
         success, img = self.cap.read()
         if not success or img is None:
             logging.error("Cannot read frame from webcam.")
             # Attempt to recover or notify user?
-            # For now, just skip this frame processing.
-            # Consider stopping timer if errors persist?
             return
 
         # --- Process Frame for Hands ---
@@ -119,7 +131,6 @@ class MainApp:
         # Performance Logging (Optional)
         elapsed_time = time.time() - start_time
         # logging.debug(f"Frame processing time: {elapsed_time:.4f} seconds")
-        # Dynamically adjust timer interval based on processing time? Advanced.
 
 
     def process_webcam_frame(self, img):
@@ -141,7 +152,7 @@ class MainApp:
             self.gui.update_mode(mode_name) # Update GUI label first
             self.last_mode = mode_name
             # Reset drawing points when mode changes to prevent artifacts
-            self.drawing_canvas.reset_points()
+            self.drawing_canvas.reset_points(mode=self.gui.drawing_mode, blackboard_mode=self.gui.is_blackboard_mode()) # Pass current state
             self.last_draw_action_time = 0
             self.gui.show_toast(f"Mode: {mode_name}") # Announce mode change
 
@@ -149,27 +160,26 @@ class MainApp:
         current_time = time.time()
         # Check if cooldown period has passed for major actions
         can_perform_action = (current_time - self.last_action_time) > self.action_cooldown
+        can_draw_or_erase = (current_time - self.last_draw_action_time) > self.min_draw_interval
 
         # --- Presentation Mode Logic ---
         if current_mode == PRESENTATION_MODE:
-            self.drawing_canvas.reset_points() # Ensure no drawing state persists
+            self.drawing_canvas.reset_points(mode=self.gui.drawing_mode, blackboard_mode=self.gui.is_blackboard_mode()) # Ensure clean state
             self.last_draw_action_time = 0
 
             # Next Slide: Index finger up [0, 1, 0, 0, 0]
             if fingers == [0, 1, 0, 0, 0] and can_perform_action:
                 if self.gui.navigate_slide(1): # navigate_slide returns True if successful
-                   # self.drawing_canvas.clear_canvas() # Clearing annotations here might be unexpected
                    self.last_action_time = current_time
                    logging.info("Gesture: Next slide")
-                   self.gui.show_toast("Next slide") # Use toast for feedback
+                   # self.gui.show_toast("Next slide") # Optional feedback
 
             # Previous Slide: Thumb up [1, 0, 0, 0, 0]
             elif fingers == [1, 0, 0, 0, 0] and can_perform_action:
                 if self.gui.navigate_slide(-1):
-                    # self.drawing_canvas.clear_canvas()
                     self.last_action_time = current_time
                     logging.info("Gesture: Previous slide")
-                    self.gui.show_toast("Previous slide")
+                    # self.gui.show_toast("Previous slide")
 
             # Screenshot: Thumb, Index, Middle fingers up [1, 1, 1, 0, 0]
             elif fingers == [1, 1, 1, 0, 0] and can_perform_action:
@@ -187,94 +197,43 @@ class MainApp:
         elif current_mode == DRAWING_MODE:
             # Set brush properties (could optimize by setting only if changed)
             self.drawing_canvas.set_brush_size(self.gui.brush_size_slider.value())
-            self.drawing_canvas.set_opacity(self.gui.opacity_slider.value())
+            # Opacity setting REMOVED
+            # self.drawing_canvas.set_opacity(self.gui.opacity_slider.value())
 
             # Draw with Index finger [X, 1, X, X, X] (check only index finger [1])
             if fingers[1] == 1 and lm_list and len(lm_list) > 8: # Check index finger tip landmark exists
-                x_raw, y_raw = lm_list[8][1], lm_list[8][2] # Raw coords from webcam frame
+                 if can_draw_or_erase: # Apply throttle
+                    x_raw, y_raw = lm_list[8][1], lm_list[8][2] # Raw coords from webcam frame
 
-                # Normalize coordinates to a virtual space (e.g., 800x600)
-                # This space matches the expectation of drawing_canvas methods
-                # Use webcam dimensions for normalization source
-                x_norm = min(max(int(x_raw * 800 / self.WEBCAM_WIDTH), 0), 799)
-                y_norm = min(max(int(y_raw * 600 / self.WEBCAM_HEIGHT), 0), 599)
+                    # Normalize coordinates to a virtual space (e.g., 800x600)
+                    x_norm = min(max(int(x_raw * 800 / self.WEBCAM_WIDTH), 0), 799)
+                    y_norm = min(max(int(y_raw * 600 / self.WEBCAM_HEIGHT), 0), 599)
 
-                drawing_mode = self.gui.drawing_mode
-                draw_location = self.gui.draw_location
-                blackboard_mode = self.gui.is_blackboard_mode()
+                    drawing_mode = self.gui.drawing_mode
+                    draw_location = self.gui.draw_location
+                    blackboard_mode = self.gui.is_blackboard_mode()
 
-                annotation = None # Variable to hold the annotation dict to be saved
-                # --- Perform Drawing ---
-                # Pass normalized coordinates to canvas methods
-                if draw_location in ['slide', 'both']:
-                    # draw() scales internally from 800x600 to slide dimensions
-                    annotation = self.drawing_canvas.draw(x_norm, y_norm, mode=drawing_mode, blackboard_mode=blackboard_mode)
-                if draw_location in ['webcam', 'both']:
-                    # draw_on_webcam() scales internally from 800x600 to webcam dimensions
-                    annotation_webcam = self.drawing_canvas.draw_on_webcam(x_norm, y_norm, mode=drawing_mode, blackboard_mode=blackboard_mode)
-                    if draw_location == 'webcam': # Prioritize webcam if only drawing there
-                         annotation = annotation_webcam
-                         
-                # --- Save Annotation ---
-                # Save the latest relevant annotation generated
-                # Check user ID, valid slide index, and that an annotation was created
-                if annotation and self.gui.current_user_id and \
-                   self.gui.slides and 0 <= self.gui.current_slide_index < len(self.gui.slides):
-                    try:
-                        slide_id = self.gui.slides[self.gui.current_slide_index][0]
-                        if slide_id:
-                             # The draw methods already appended to current_annotations
-                             # No need to save 'annotation' directly, save from current_annotations later or immediately?
-                             # For immediate feedback, let's save the last one added.
-                             last_ann = self.drawing_canvas.current_annotations[-1]
-                             if self.db.save_annotation(slide_id, self.gui.current_user_id, last_ann):
-                                 # Optional: logging.debug(f"Saved annotation part for slide {slide_id}")
-                                 pass # Saved successfully
-                             else:
-                                 logging.error(f"DB save failed for annotation on slide {slide_id}")
-                                 # Consider removing from current_annotations if save fails?
-                        else:
-                             logging.error("Invalid slide_id, cannot save annotation.")
-                    except IndexError:
-                         logging.error("Error accessing current_annotations list, possibly empty.")
-                    except Exception as e:
-                        logging.error(f"Error saving annotation during draw: {e}")
+                    # --- Perform Drawing ---
+                    # draw() and draw_on_webcam() add to current_annotations internally
+                    if draw_location in ['slide', 'both']:
+                        self.drawing_canvas.draw(x_norm, y_norm, mode=drawing_mode, blackboard_mode=blackboard_mode)
+                    if draw_location in ['webcam', 'both']:
+                        self.drawing_canvas.draw_on_webcam(x_norm, y_norm, mode=drawing_mode, blackboard_mode=blackboard_mode)
 
-                self.last_draw_action_time = current_time # Mark that drawing happened
+                    self.last_draw_action_time = current_time # Mark that drawing happened
 
             # If index finger is down, finalize shape drawing
             else:
                 # Check if we were drawing recently to finalize
                 if self.last_draw_action_time != 0:
+                    logging.debug("Index finger down/lost in Drawing Mode, finalizing shape.")
                     drawing_mode = self.gui.drawing_mode
                     blackboard_mode = self.gui.is_blackboard_mode()
                     # reset_points finalizes shapes and clears start/end points
+                    # It adds the final shape annotation to current_annotations
                     self.drawing_canvas.reset_points(mode=drawing_mode, blackboard_mode=blackboard_mode)
-                    # Check if reset_points generated final shape annotations in current_annotations
-                    final_annotations = self.drawing_canvas.current_annotations
-                    if final_annotations and self.gui.current_user_id and \
-                       self.gui.slides and 0 <= self.gui.current_slide_index < len(self.gui.slides):
-                        try:
-                            slide_id = self.gui.slides[self.gui.current_slide_index][0]
-                            if slide_id:
-                                saved_final = 0
-                                for ann in list(final_annotations): # Iterate copy
-                                     if self.db.save_annotation(slide_id, self.gui.current_user_id, ann):
-                                          saved_final += 1
-                                     else:
-                                          logging.error(f"Failed to save final annotation part for slide {slide_id}")
-                                if saved_final > 0:
-                                     logging.info(f"Saved {saved_final} final annotation parts for slide {slide_id}")
-                                     self.gui.show_toast("Shape finalized")
-                                # Clear the list after attempting save
-                                self.drawing_canvas.current_annotations = []
-                            else:
-                                logging.error("Invalid slide_id found for final shape.")
-                        except Exception as e:
-                            logging.error(f"Error saving final shape annotation: {e}")
-                            self.drawing_canvas.current_annotations = [] # Clear on error too
-
                     self.last_draw_action_time = 0 # Reset draw timer
+
 
             # Change Color: All fingers up [1, 1, 1, 1, 1]
             can_change_color = (current_time - self.last_color_change_time) > self.color_change_delay
@@ -289,59 +248,33 @@ class MainApp:
         elif current_mode == ERASING_MODE:
             # Erase with Index finger [X, 1, X, X, X]
             if fingers[1] == 1 and lm_list and len(lm_list) > 8:
-                x_raw, y_raw = lm_list[8][1], lm_list[8][2]
-                # Normalize coordinates same as drawing
-                x_norm = min(max(int(x_raw * 800 / self.WEBCAM_WIDTH), 0), 799)
-                y_norm = min(max(int(y_raw * 600 / self.WEBCAM_HEIGHT), 0), 599)
+                 if can_draw_or_erase: # Apply throttle
+                    x_raw, y_raw = lm_list[8][1], lm_list[8][2]
+                    # Normalize coordinates same as drawing
+                    x_norm = min(max(int(x_raw * 800 / self.WEBCAM_WIDTH), 0), 799)
+                    y_norm = min(max(int(y_raw * 600 / self.WEBCAM_HEIGHT), 0), 599)
 
-                # erase() acts on both canvases internally using normalized coords
-                self.drawing_canvas.erase(x_norm, y_norm)
-
-                # Save erase action (erase adds annotation to current_annotations)
-                if self.gui.current_user_id and self.gui.slides and \
-                   0 <= self.gui.current_slide_index < len(self.gui.slides):
-                    try:
-                        slide_id = self.gui.slides[self.gui.current_slide_index][0]
-                        if slide_id:
-                            # Get the erase annotation added by erase()
-                            if self.drawing_canvas.current_annotations:
-                                erase_annotation = self.drawing_canvas.current_annotations[-1]
-                                if erase_annotation.get('type') == 'erase':
-                                     if self.db.save_annotation(slide_id, self.gui.current_user_id, erase_annotation):
-                                         # logging.debug(f"Saved erase annotation for slide {slide_id}")
-                                         pass
-                                     else:
-                                         logging.error(f"Failed to save erase annotation for slide {slide_id}")
-                                     # Remove erase annotation from temp list after attempting save
-                                     self.drawing_canvas.current_annotations.pop()
-                            else:
-                                 logging.warning("Erase action performed but no annotation found in list.")
-                        else:
-                             logging.error("Invalid slide_id found for erase.")
-                    except Exception as e:
-                        logging.error(f"Error saving erase annotation: {e}")
-
-                self.last_draw_action_time = current_time # Use same timer as drawing
+                    # erase() acts on both canvases internally and adds annotation
+                    self.drawing_canvas.erase(x_norm, y_norm)
+                    self.last_draw_action_time = current_time # Mark erase action
 
             else:
                 # Reset points if finger goes down (less critical for erase, but good practice)
                 if self.last_draw_action_time != 0:
-                     self.drawing_canvas.reset_points()
+                     self.drawing_canvas.reset_points(mode="pen") # Reset pen state
                      self.last_draw_action_time = 0
 
             # Clear Canvas: All fingers up [1, 1, 1, 1, 1]
-            # Use general action cooldown for this less frequent action
             if all(fingers) and can_perform_action:
-                self.drawing_canvas.clear_canvas() # Clears visual canvas and current_annotations list
+                logging.info("Gesture: Clear canvas detected.")
+                # clear_canvas clears visuals and adds annotation
+                self.drawing_canvas.clear_canvas()
                 self.last_action_time = current_time # Apply cooldown
-                logging.info("Gesture: Canvas cleared")
+                logging.info("Canvas cleared visually, 'clear_canvas' annotation added.")
                 self.gui.show_toast("Canvas cleared")
-                # Add a "clear" annotation type to DB? If needed for persistence.
-                # Example: clear_ann = {'type': 'clear_canvas', 'timestamp': time.time()}
-                # self.db.save_annotation(slide_id, user_id, clear_ann)
-                # Then, load_annotations needs to handle 'clear_canvas' type.
 
-    def update_display(self, img):
+
+    def update_display(self, img_webcam):
         """Update the GUI with the current slide (including drawings) and webcam feed."""
         # --- Prepare Slide Display ---
         slide_img_original = self.gui.get_current_slide() # Get original (e.g., 1920x1080 BGR)
@@ -354,24 +287,25 @@ class MainApp:
         self.gui.update_slide(slide_display_final) # Passes the combined image
 
         # --- Prepare Webcam Display ---
-        # Webcam image 'img' already has landmarks drawn
+        # Webcam image 'img_webcam' already has landmarks drawn
         webcam_canvas = self.drawing_canvas.webcam_canvas # 1280x720
         webcam_preview = self.drawing_canvas.get_webcam_preview() # 1280x720
 
-        img_display_final = img.copy() # Start with a copy
+        # Make a copy to draw overlay onto
+        img_display_final = img_webcam.copy()
 
         # Combine webcam canvas and preview
         webcam_canvas_combined = cv2.bitwise_or(webcam_canvas, webcam_preview)
 
-        # Overlay drawings using masking if dimensions match
+        # Overlay drawings using masking if dimensions match and drawing exists
         if img_display_final.shape == webcam_canvas_combined.shape and \
-           img_display_final.dtype == webcam_canvas_combined.dtype:
-            try:
-                # Create mask for webcam drawings/erase
-                img2gray_wc = cv2.cvtColor(webcam_canvas_combined, cv2.COLOR_BGR2GRAY)
-                ret_wc, mask_wc = cv2.threshold(img2gray_wc, 0, 255, cv2.THRESH_BINARY)
-
-                if cv2.countNonZero(mask_wc) > 0:
+           img_display_final.dtype == webcam_canvas_combined.dtype :
+           # Check if there is anything to overlay
+           if cv2.countNonZero(cv2.cvtColor(webcam_canvas_combined, cv2.COLOR_BGR2GRAY)) > 0:
+                try:
+                    # Create mask for webcam drawings/erase
+                    img2gray_wc = cv2.cvtColor(webcam_canvas_combined, cv2.COLOR_BGR2GRAY)
+                    ret_wc, mask_wc = cv2.threshold(img2gray_wc, 0, 255, cv2.THRESH_BINARY)
                     mask_inv_wc = cv2.bitwise_not(mask_wc)
 
                     # Black-out area on webcam feed
@@ -381,23 +315,28 @@ class MainApp:
                     # Combine
                     img_display_final = cv2.add(img_bg_wc, img_fg_wc)
 
-            except cv2.error as e:
-                logging.error(f"OpenCV error combining webcam and canvas (masked): {e}")
-                # img_display_final remains the original 'img' as fallback
-        else:
-             logging.warning(f"Shape/dtype mismatch: Webcam={img.shape}/{img.dtype}, WC_Canvas_Combined={webcam_canvas_combined.shape}/{webcam_canvas_combined.dtype}")
-             # img_display_final remains the original 'img' as fallback
+                except cv2.error as e:
+                    logging.error(f"OpenCV error combining webcam and canvas (masked): {e}")
+                    # img_display_final remains the original 'img_webcam' as fallback
+        # else: # Log mismatch if shapes/types are different
+        #      if img_display_final.shape != webcam_canvas_combined.shape or \
+        #         img_display_final.dtype != webcam_canvas_combined.dtype:
+        #           logging.warning(f"Shape/dtype mismatch preventing webcam overlay: Cam={img_webcam.shape}/{img_webcam.dtype}, WC_Canvas_Combined={webcam_canvas_combined.shape}/{webcam_canvas_combined.dtype}")
 
         # Update the webcam label in the GUI
         self.gui.update_frame(img_display_final)
 
     def run(self):
         """Initialize and run the application."""
+        exit_code = 0 # Default exit code
         try:
             self.gui.show()
             logging.info("GestureTeach Application GUI is now showing.")
             exit_code = self.app.exec_() # Start PyQt event loop
             logging.info(f"Application exited with code {exit_code}.")
+        except SystemExit as e:
+             logging.info(f"Application exited via SystemExit with code {e.code}.")
+             exit_code = e.code if e.code is not None else 0
         except Exception as e:
             logging.critical(f"Unhandled exception in run method: {e}", exc_info=True)
             exit_code = 1 # Indicate error exit
@@ -411,6 +350,10 @@ class MainApp:
                 self.cap.release()
                 logging.info("Webcam released.")
             cv2.destroyAllWindows() # Close any OpenCV windows
+             # Save annotations before closing DB
+            if hasattr(self, 'gui') and self.gui.current_user_id:
+                 logging.info("Attempting final annotation save during cleanup...")
+                 self.gui.save_current_annotations()
             if hasattr(self, 'db'):
                 self.db.close() # Close database connection (logs internally)
             logging.info("Cleanup finished.")
@@ -419,18 +362,31 @@ class MainApp:
 if __name__ == "__main__":
     # Setup logging (configure once at the start)
     log_format = '%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
+    # Use os.path.join for cross-platform compatibility
+    log_dir = "logs" # Define log directory name
+    try:
+        os.makedirs(log_dir, exist_ok=True) # Create logs dir if needed
+        log_filename = os.path.join(log_dir, 'gesture_teach.log') # Path to log file
+    except OSError as e:
+         print(f"Error creating log directory '{log_dir}': {e}. Logging disabled.", file=sys.stderr)
+         log_filename = None # Disable file logging if dir fails
+
+    log_handlers = [logging.StreamHandler(sys.stdout)] # Always log to console
+    if log_filename:
+         log_handlers.append(logging.FileHandler(log_filename, mode='a', encoding='utf-8')) # Add file handler if path is valid
+
     logging.basicConfig(level=logging.INFO, # Or DEBUG for more details
-                        filename='gesture_teach.log',
                         format=log_format,
-                        filemode='a') # Append to the log file
-    # Add a handler to also print logs to console (optional)
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO) # Console level can be different
-    console_handler.setFormatter(logging.Formatter(log_format))
-    logging.getLogger().addHandler(console_handler)
+                        handlers=log_handlers)
+
+    # Set console handler level (if needed)
+    # for handler in logging.getLogger().handlers:
+    #     if isinstance(handler, logging.StreamHandler):
+    #         handler.setLevel(logging.INFO)
 
     logging.info("========================================")
     logging.info("Starting GestureTeach Application")
+    logging.info(f"Log file: {log_filename if log_filename else 'Disabled'}")
     logging.info("========================================")
 
     main_app = MainApp()

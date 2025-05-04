@@ -1,7 +1,7 @@
-opencv-python
-numpy
-mediapipe
-PyQt5
-mysql-connector-python
-bcrypt
-python-dotenv
+PyQt5==5.15.11
+opencv-python==4.11.0.86
+mediapipe==0.10.14
+mysql-connector-python==9.3.0
+python-dotenv==1.1.0
+bcrypt==4.3.0
+numpy==2.2.5

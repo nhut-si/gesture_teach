@@ -157,15 +157,21 @@ class Database:
         """Delete a slide set and its associated slides."""
         try:
             cursor = self.connection.cursor()
+            # Quan trọng: Xóa các slide con trước
+            cursor.execute("DELETE FROM annotations WHERE slide_id IN (SELECT id FROM slides WHERE slide_set_id = %s)", (set_id,)) # <<< THÊM: Xóa annotations liên quan
             cursor.execute("DELETE FROM slides WHERE slide_set_id = %s", (set_id,))
             cursor.execute("DELETE FROM slide_sets WHERE id = %s", (set_id,))
-            self.connection.commit()
+            self.connection.commit() # <<< QUAN TRỌNG: Đảm bảo có commit
+            logging.info(f"Successfully deleted slide set with id: {set_id}") # Ghi log thành công
             return True
         except Error as e:
-            logging.error(f"Error deleting slide set: {e}")
+            logging.error(f"Error deleting slide set with id {set_id}: {e}") # Ghi log lỗi
+            # Có thể thêm self.connection.rollback() ở đây nếu cần
             return False
         finally:
-            cursor.close()
+            # Đảm bảo cursor được đóng ngay cả khi có lỗi
+            if 'cursor' in locals() and cursor is not None:
+                cursor.close()
 
     def add_slide(self, slide_set_id, file_path, order_index):
         """Add a slide to a slide set."""
@@ -199,15 +205,20 @@ class Database:
         """Remove a slide by its database ID."""
         try:
             cursor = self.connection.cursor()
+            # Quan trọng: Xóa annotations liên quan đến slide này trước
+            cursor.execute("DELETE FROM annotations WHERE slide_id = %s", (slide_id,)) # <<< THÊM: Xóa annotations liên quan
             query = "DELETE FROM slides WHERE id = %s"
             cursor.execute(query, (slide_id,))
-            self.connection.commit()
+            self.connection.commit() # <<< QUAN TRỌNG: Đảm bảo có commit
+            logging.info(f"Successfully removed slide with id: {slide_id}") # Ghi log thành công
             return True
         except Error as e:
-            logging.error(f"Error removing slide by id: {e}")
+            logging.error(f"Error removing slide by id {slide_id}: {e}") # Ghi log lỗi
+            # Có thể thêm self.connection.rollback() ở đây nếu cần
             return False
         finally:
-            cursor.close()
+            if 'cursor' in locals() and cursor is not None:
+                cursor.close()
 
     def get_slide_sets(self, user_id):
         """Get all slide sets for a user."""

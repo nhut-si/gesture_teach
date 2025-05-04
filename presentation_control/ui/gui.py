@@ -738,10 +738,12 @@ class AppGUI(QMainWindow):
                                      f"Are you sure you want to permanently delete the slide set '{set_name}' and all its slides/annotations?",
                                      QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.Yes:
-            if self.db.delete_slide_set(set_id):
+            success = self.db.delete_slide_set(set_id) # Lấy kết quả trả vềkeyPressEvent
+            if success: # Kiểm tra kết quả
                 self.show_toast(f"Slide set '{set_name}' deleted.")
-                self.load_slide_sets()
-
+                self.load_slide_sets() # <<< QUAN TRỌNG: Cập nhật lại danh sách
+            else:
+                QMessageBox.warning(self, "Database Error", f"Failed to delete slide set '{set_name}'. Check logs.")
     # --- Slide Loading and Display ---
     def load_slide_sets(self):
         """Load slide sets for the current user into the list."""
@@ -1006,6 +1008,7 @@ class AppGUI(QMainWindow):
             self.statusBar().setVisible(False)
             self.fullscreen_button.setText("Exit Full Screen")
             self.fullscreen_button.setShortcut("Esc")
+            self.setFocus()
         else:
             self.is_fullscreen = False
             self.showNormal()
@@ -1075,23 +1078,56 @@ class AppGUI(QMainWindow):
         self.sidebar_toggle_button.setText("Hide Sidebar" if self.sidebar_visible else "Show Sidebar")
 
     # --- Keyboard Shortcuts ---
+    # --- Keyboard Shortcuts ---
     def keyPressEvent(self, event):
         """Handle keyboard shortcuts."""
         key = event.key()
         modifiers = event.modifiers()
 
+        accepted = False # Dùng cờ để đánh dấu sự kiện đã được xử lý hay chưa
+
+        # Chỉ xử lý khi không có phím bổ trợ (Shift, Ctrl, Alt) được nhấn
         if modifiers == Qt.NoModifier:
+
+            # Xử lý phím F11 (luôn hoạt động để bật/tắt fullscreen)
             if key == Qt.Key_F11:
                 self.toggle_fullscreen()
+                accepted = True # Đánh dấu đã xử lý
+
+            # Xử lý phím Escape (chỉ hoạt động khi đang fullscreen để thoát)
             elif key == Qt.Key_Escape and self.is_fullscreen:
                 self.toggle_fullscreen()
-            if self.current_user_id and not self.is_fullscreen:
-                if key == Qt.Key_Right or key == Qt.Key_PageDown:
-                    self.navigate_slide(1)
-                elif key == Qt.Key_Left or key == Qt.Key_PageUp:
-                    self.navigate_slide(-1)
-                elif key == Qt.Key_B:
-                    self.blackboard_button.click()
+                accepted = True # Đánh dấu đã xử lý
+
+            # --- Xử lý phím mũi tên và PageUp/PageDown ---
+            # Điều kiện: Đã đăng nhập (self.current_user_id tồn tại)
+            # Hoạt động ở cả chế độ thường và fullscreen
+            elif self.current_user_id and (key == Qt.Key_Right or key == Qt.Key_PageDown):
+                self.navigate_slide(1)
+                accepted = True # Đánh dấu đã xử lý
+            elif self.current_user_id and (key == Qt.Key_Left or key == Qt.Key_PageUp):
+                self.navigate_slide(-1)
+                accepted = True # Đánh dấu đã xử lý
+
+            # --- Xử lý phím 'B' (Toggle Blackboard) ---
+            # Điều kiện: Đã đăng nhập VÀ KHÔNG ở chế độ fullscreen
+            elif self.current_user_id and not self.is_fullscreen and key == Qt.Key_B:
+                self.blackboard_button.click()
+                accepted = True # Đánh dấu đã xử lý
+
+            # --- Thêm các phím tắt khác vào đây nếu cần ---
+            # Ví dụ:
+            # elif self.current_user_id and key == Qt.Key_S:
+            #     # Làm gì đó với phím S
+            #     accepted = True
+
+        # Nếu sự kiện đã được xử lý bởi code ở trên, chấp nhận nó và dừng lại
+        if accepted:
+            event.accept()
+            return
+
+        # Nếu không có xử lý nào ở trên khớp, chuyển sự kiện cho lớp cha xử lý (quan trọng!)
+        super().keyPressEvent(event)
 
     # --- Updates from Main Loop ---
     def update_mode(self, mode):
@@ -1188,41 +1224,61 @@ class AppGUI(QMainWindow):
         guide_text = QTextEdit()
         guide_text.setReadOnly(True)
         guide_text.setHtml("""
-            <h2>GestureTeach Usage Guide</h2>
-            <h3>Modes (Select with Gestures)</h3>
+            <h2>GestureTeach - Hướng dẫn Sử dụng</h2>
+
+            Chào mừng bạn đến với GestureTeach! Sử dụng cử chỉ tay đơn giản để điều khiển bài thuyết trình của bạn.
+
+            <h3>Chuyển đổi Chế độ Hoạt động</h3>
+            <p>Thực hiện các cử chỉ sau để chuyển giữa các chế độ:</p>
             <ul>
-                <li><b>Presentation Mode:</b> Thumb + Index fingers up.</li>
-                <li><b>Drawing Mode:</b> Index + Middle fingers up.</li>
-                <li><b>Erasing Mode:</b> Index + Middle + Ring fingers up.</li>
+                <li><b>Chế độ Trình chiếu (Mặc định):</b> <strong>Ngón trỏ + Ngón út</strong> giơ lên. <i>(Hoặc cử chỉ bạn đã chọn)</i></li>
+                <li><b>Chế độ Vẽ:</b> <strong>Ngón trỏ + Ngón giữa</strong> giơ lên.</li>
+                <li><b>Chế độ Xóa:</b> <strong>Ngón trỏ + Ngón giữa + Ngón áp út</strong> giơ lên.</li>
             </ul>
-            <h3>Presentation Mode Actions</h3>
+            <p><i>(Giao diện sẽ hiển thị chế độ hiện tại)</i></p>
+
+            <h3>Chức năng trong Chế độ Trình chiếu</h3>
+            <p>Khi ở chế độ này, bạn có thể:</p>
             <ul>
-                <li><b>Next Slide:</b> Index finger only.</li>
-                <li><b>Previous Slide:</b> Thumb only.</li>
-                <li><b>Take Screenshot:</b> Thumb + Index + Middle fingers.</li>
-                <li><b>Toggle Fullscreen:</b> Middle + Ring fingers.</li>
+                <li><b>Slide Tiếp theo (Next Slide):</b> Chỉ <strong>Ngón trỏ</strong> giơ lên.</li>
+                <li><b>Slide Trước đó (Previous Slide):</b> Chỉ <strong>Ngón cái</strong> giơ lên (tay thẳng đứng).</li>
+                <li><b>Chụp Màn hình (Screenshot):</b> <strong>Ngón cái + Ngón trỏ + Ngón giữa</strong> giơ lên. (Ảnh lưu vào thư mục 'screens').</li>
+                <li><b>Bật/Tắt Toàn màn hình (Toggle Fullscreen):</b> <strong>Ngón giữa + Ngón áp út</strong> giơ lên.</li>
             </ul>
-            <h3>Drawing Mode Actions</h3>
+
+            <h3>Chức năng trong Chế độ Vẽ</h3>
+            <p>Khi ở chế độ này:</p>
             <ul>
-                <li><b>Draw/Shape Drag:</b> Index finger only (position of tip).</li>
-                <li><b>Change Color Cycle:</b> All 5 fingers up.</li>
-                <li><b>Select Tool:</b> Use sidebar buttons (Pen, Circle, Square).</li>
-                <li><b>Adjust Size:</b> Use sidebar sliders.</li>
-                <li><b>Change Draw Target:</b> Use sidebar dropdown (Slide, Webcam, Both).</li>
+                <li><b>Vẽ / Kéo thả Hình dạng:</b> Dùng <strong>đầu Ngón trỏ</strong> di chuyển.</li>
+                <li><b>Đổi màu (Cycle Color):</b> <strong>Cả 5 ngón tay</strong> giơ lên (xoay vòng qua các màu).</li>
+                <li><b>Chọn Công cụ (Tool):</b> Sử dụng các nút <strong>Pen, Circle, Square</strong> trên thanh Sidebar.</li>
+                <li><b>Điều chỉnh Kích thước (Size):</b> Sử dụng <strong>thanh trượt Brush Size</strong> trên Sidebar.</li>
+                <li><b>Chọn Vị trí Vẽ (Target):</b> Sử dụng <strong>hộp chọn Draw On</strong> (Slide, Webcam, Both) trên Sidebar.</li>
             </ul>
-            <h3>Erasing Mode Actions</h3>
+
+            <h3>Chức năng trong Chế độ Xóa</h3>
+            <p>Khi ở chế độ này:</p>
             <ul>
-                <li><b>Erase Point:</b> Index finger only (position of tip). Eraser size based on brush size.</li>
-                <li><b>Clear Entire Canvas:</b> All 5 fingers up.</li>
+                <li><b>Xóa tại điểm:</b> Dùng <strong>đầu Ngón trỏ</strong> di chuyển qua vùng cần xóa. (Kích thước tẩy dựa trên Brush Size).</li>
+                <li><b>Xóa Toàn bộ (Clear Canvas):</b> <strong>Cả 5 ngón tay</strong> giơ lên.</li>
             </ul>
-            <h3>Keyboard Shortcuts</h3>
+
+            <h3>Phím tắt Bàn phím</h3>
             <ul>
-                <li><b>Left/Right Arrow or PageUp/PageDown:</b> Previous/Next slide.</li>
-                <li><b>F11:</b> Toggle fullscreen.</li>
-                <li><b>Esc:</b> Exit fullscreen.</li>
-                <li><b>B:</b> Toggle Blackboard Mode.</li>
+                <li><b>Mũi tên Trái/Phải</b> hoặc <b>PageUp/PageDown:</b> Chuyển slide trước/sau (hoạt động cả khi fullscreen).</li>
+                <li><b>F11:</b> Bật/Tắt chế độ toàn màn hình.</li>
+                <li><b>Esc:</b> Thoát chế độ toàn màn hình.</li>
+                <li><b>B:</b> Bật/Tắt Chế độ Bảng đen (Blackboard Mode) - chỉ hoạt động khi <i>không</i> ở chế độ toàn màn hình.</li>
             </ul>
-            <p><i>Note: Gestures require a short pause (cooldown) between actions.</i></p>
+
+            <h3>Lưu ý Quan trọng:</h3>
+            <ul>
+                <li><b>Độ trễ (Cooldown):</b> Cần có một khoảng dừng ngắn giữa các lần thực hiện cử chỉ để hệ thống nhận diện chính xác (đặc biệt khi chuyển mode hoặc thực hiện các hành động chính).</li>
+                <li><b>Môi trường:</b> Đảm bảo đủ ánh sáng và nền phía sau không quá phức tạp để nhận diện tay tốt nhất.</li>
+                <li><b>Vẽ/Xóa:</b> Hệ thống sử dụng vị trí của <strong>đầu ngón trỏ</strong> để xác định điểm vẽ/xóa.</li>
+            </ul>
+
+            <p><i>Chúc bạn có những buổi thuyết trình hiệu quả và thú vị với GestureTeach!</i></p>
         """)
         layout.addWidget(guide_text)
 

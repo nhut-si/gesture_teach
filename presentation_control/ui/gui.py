@@ -4,9 +4,9 @@ import numpy as np
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QLineEdit, QMessageBox, QListWidget, QListWidgetItem,
                              QFileDialog, QInputDialog, QDialog, QSlider, QComboBox, QTextEdit,
-                             QSizePolicy, QStatusBar, QGridLayout, QFrame, QSpacerItem) # Thêm QFrame, QSpacerItem
+                             QSizePolicy, QStatusBar, QGridLayout, QFrame, QSpacerItem)
 from PyQt5.QtCore import Qt, QTimer, QByteArray, QBuffer
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QFont # Thêm QFont
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QFont
 from database import Database
 import os
 import datetime
@@ -161,9 +161,8 @@ class AppGUI(QMainWindow):
         # === Main Content Area ===
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setContentsMargins(0, 0, 0, 0) # Bỏ margin content layout
-        self.content_layout.setAlignment(Qt.AlignCenter) # Căn giữa nội dung
-
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        self.content_layout.setAlignment(Qt.AlignCenter)
 
         # Sidebar Toggle Button
         self.sidebar_toggle_button = QPushButton("Hide Sidebar")
@@ -175,35 +174,87 @@ class AppGUI(QMainWindow):
 
         # --- Login Widget ---
         self.login_widget = QWidget()
-        self.login_layout = QVBoxLayout(self.login_widget)
-        self.login_layout.setAlignment(Qt.AlignCenter)
-        login_title = QLabel("<h2>GestureTeach Login</h2>")
-        login_title.setStyleSheet("color: #1E293B; padding: 10px;")
+        self.login_widget.setFixedSize(350, 400)  # Điều chỉnh kích thước phù hợp
+        self.login_widget.setStyleSheet("""
+            background-color: white;
+            border-radius: 12px;
+        """)
+        self.login_layout = QGridLayout(self.login_widget)
+        self.login_layout.setContentsMargins(30, 30, 30, 30)
+        self.login_layout.setSpacing(20)  # Tăng khoảng cách giữa các phần tử
+
+        # Login Title
+        login_title = QLabel("GestureTeach")
+        login_title.setFont(QFont("Arial", 18, QFont.Bold))  # Giảm kích thước font cho phù hợp
+        login_title.setStyleSheet("color: #1E293B; margin-bottom: 20px;")
         login_title.setAlignment(Qt.AlignCenter)
+
+        # Username/Email Input
         self.username_input = QLineEdit()
         self.username_input.setPlaceholderText("Username or Email")
-        self.username_input.setFixedWidth(300)
-        self.username_input.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
+        self.username_input.setFixedWidth(250)  # Kích thước hợp lý dựa trên hình ảnh
+        self.username_input.setFixedHeight(40)  # Kích thước hợp lý
+        self.username_input.setStyleSheet("""
+            background-color: #F9FAFB;
+            border: 1px solid #E5E7EB;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 14px;
+            text-align: left;
+        """)
+
+        # Password Input
         self.password_input = QLineEdit()
         self.password_input.setPlaceholderText("Password")
         self.password_input.setEchoMode(QLineEdit.Password)
-        self.password_input.setFixedWidth(300)
-        self.password_input.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
-        self.login_button = QPushButton("Login")
-        self.login_button.setFixedHeight(40)
-        self.login_button.setFixedWidth(150)
-        self.login_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
+        self.password_input.setFixedWidth(250)  # Kích thước hợp lý
+        self.password_input.setFixedHeight(40)  # Kích thước hợp lý
+        self.password_input.setStyleSheet("""
+            background-color: #F9FAFB;
+            border: 1px solid #E5E7EB;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 14px;
+            text-align: left;
+        """)
+
+        # Login Button
+        self.login_button = QPushButton("Sign In")
+        self.login_button.setFixedWidth(250)  # Kích thước hợp lý
+        self.login_button.setFixedHeight(45)  # Kích thước hợp lý
+        self.login_button.setStyleSheet("""
+            background-color: #3B82F6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+        """)
+        self.login_button.setCursor(Qt.PointingHandCursor)
         self.login_button.clicked.connect(self.handle_login)
-        self.register_button = QPushButton("Register New Account")
-        self.register_button.setFixedHeight(40)
-        self.register_button.setFixedWidth(200)
-        self.register_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
+
+        # Register Button
+        self.register_button = QPushButton("Create New Account")
+        self.register_button.setFixedWidth(250)  # Kích thước hợp lý
+        self.register_button.setFixedHeight(40)  # Kích thước hợp lý
+        self.register_button.setStyleSheet("""
+            background-color: transparent;
+            color: #3B82F6;
+            border: 1px solid #3B82F6;
+            border-radius: 8px;
+            font-size: 14px;
+        """)
+        self.register_button.setCursor(Qt.PointingHandCursor)
         self.register_button.clicked.connect(self.show_register)
-        self.login_layout.addWidget(login_title)
-        self.login_layout.addWidget(self.username_input)
-        self.login_layout.addWidget(self.password_input)
-        self.login_layout.addWidget(self.login_button)
-        self.login_layout.addWidget(self.register_button)
+
+        # Add to Login Layout
+        self.login_layout.addWidget(login_title, 0, 0, 1, 2, Qt.AlignHCenter)
+        self.login_layout.addWidget(self.username_input, 1, 0, 1, 2, Qt.AlignHCenter)
+        self.login_layout.addWidget(self.password_input, 2, 0, 1, 2, Qt.AlignHCenter)
+        self.login_layout.addWidget(self.login_button, 3, 0, 1, 2, Qt.AlignHCenter)
+        self.login_layout.addWidget(self.register_button, 4, 0, 1, 2, Qt.AlignHCenter)
+        self.login_layout.setRowStretch(5, 1)
+
         self.content_layout.addWidget(self.login_widget)
 
         # --- Main Application Widget ---
@@ -421,40 +472,102 @@ class AppGUI(QMainWindow):
         self.login_widget.setVisible(False)
         if not hasattr(self, 'register_widget'):
             self.register_widget = QWidget()
-            self.register_layout = QVBoxLayout(self.register_widget)
-            self.register_layout.setAlignment(Qt.AlignCenter)
-            reg_title = QLabel("<h2>Register New Account</h2>")
-            reg_title.setStyleSheet("color: #1E293B; padding: 10px;")
+            self.register_widget.setFixedSize(350, 450)  # Điều chỉnh kích thước phù hợp
+            self.register_widget.setStyleSheet("""
+                background-color: white;
+                border-radius: 12px;
+            """)
+            self.register_layout = QGridLayout(self.register_widget)
+            self.register_layout.setContentsMargins(30, 30, 30, 30)
+            self.register_layout.setSpacing(20)  # Tăng khoảng cách giữa các phần tử
+
+            # Register Title
+            reg_title = QLabel("Create Your Account")
+            reg_title.setFont(QFont("Arial", 18, QFont.Bold))  # Giảm kích thước font cho phù hợp
+            reg_title.setStyleSheet("color: #1E293B; margin-bottom: 20px;")
             reg_title.setAlignment(Qt.AlignCenter)
+
+            # Username Input
             self.reg_username = QLineEdit()
             self.reg_username.setPlaceholderText("Username")
-            self.reg_username.setFixedWidth(300)
-            self.reg_username.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
+            self.reg_username.setFixedWidth(250)  # Kích thước hợp lý
+            self.reg_username.setFixedHeight(40)  # Kích thước hợp lý
+            self.reg_username.setStyleSheet("""
+                background-color: #F9FAFB;
+                border: 1px solid #E5E7EB;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 14px;
+                text-align: left;
+            """)
+
+            # Email Input
             self.reg_email = QLineEdit()
             self.reg_email.setPlaceholderText("Email")
-            self.reg_email.setFixedWidth(300)
-            self.reg_email.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
+            self.reg_email.setFixedWidth(250)  # Kích thước hợp lý
+            self.reg_email.setFixedHeight(40)  # Kích thước hợp lý
+            self.reg_email.setStyleSheet("""
+                background-color: #F9FAFB;
+                border: 1px solid #E5E7EB;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 14px;
+                text-align: left;
+            """)
+
+            # Password Input
             self.reg_password = QLineEdit()
-            self.reg_password.setPlaceholderText("Password (min 8 chars, A-Z, a-z, 0-9, symbol)")
+            self.reg_password.setPlaceholderText("Password (8+ chars, mixed)")
             self.reg_password.setEchoMode(QLineEdit.Password)
-            self.reg_password.setFixedWidth(300)
-            self.reg_password.setStyleSheet("background-color: white; border: 1px solid #E5E7EB; padding: 5px;")
-            self.reg_button = QPushButton("Register")
-            self.reg_button.setFixedHeight(40)
-            self.reg_button.setFixedWidth(150)
-            self.reg_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
+            self.reg_password.setFixedWidth(250)  # Kích thước hợp lý
+            self.reg_password.setFixedHeight(40)  # Kích thước hợp lý
+            self.reg_password.setStyleSheet("""
+                background-color: #F9FAFB;
+                border: 1px solid #E5E7EB;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 14px;
+                text-align: left;
+            """)
+
+            # Register Button
+            self.reg_button = QPushButton("Create Account")
+            self.reg_button.setFixedWidth(250)  # Kích thước hợp lý
+            self.reg_button.setFixedHeight(45)  # Kích thước hợp lý
+            self.reg_button.setStyleSheet("""
+                background-color: #3B82F6;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: bold;
+            """)
+            self.reg_button.setCursor(Qt.PointingHandCursor)
             self.reg_button.clicked.connect(self.handle_register)
-            self.back_button = QPushButton("Back to Login")
-            self.back_button.setFixedHeight(40)
-            self.back_button.setFixedWidth(150)
-            self.back_button.setStyleSheet("background-color: #3B82F6; color: white; border: none; padding: 5px;")
+
+            # Back Button
+            self.back_button = QPushButton("Back to Sign In")
+            self.back_button.setFixedWidth(250)  # Kích thước hợp lý
+            self.back_button.setFixedHeight(40)  # Kích thước hợp lý
+            self.back_button.setStyleSheet("""
+                background-color: transparent;
+                color: #3B82F6;
+                border: 1px solid #3B82F6;
+                border-radius: 8px;
+                font-size: 14px;
+            """)
+            self.back_button.setCursor(Qt.PointingHandCursor)
             self.back_button.clicked.connect(self.show_login)
-            self.register_layout.addWidget(reg_title)
-            self.register_layout.addWidget(self.reg_username)
-            self.register_layout.addWidget(self.reg_email)
-            self.register_layout.addWidget(self.reg_password)
-            self.register_layout.addWidget(self.reg_button)
-            self.register_layout.addWidget(self.back_button)
+
+            # Add to Register Layout
+            self.register_layout.addWidget(reg_title, 0, 0, 1, 2, Qt.AlignHCenter)
+            self.register_layout.addWidget(self.reg_username, 1, 0, 1, 2, Qt.AlignHCenter)
+            self.register_layout.addWidget(self.reg_email, 2, 0, 1, 2, Qt.AlignHCenter)
+            self.register_layout.addWidget(self.reg_password, 3, 0, 1, 2, Qt.AlignHCenter)
+            self.register_layout.addWidget(self.reg_button, 4, 0, 1, 2, Qt.AlignHCenter)
+            self.register_layout.addWidget(self.back_button, 5, 0, 1, 2, Qt.AlignHCenter)
+            self.register_layout.setRowStretch(6, 1)
+
             self.content_layout.addWidget(self.register_widget)
             self.register_widget.setVisible(False)
 

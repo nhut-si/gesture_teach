@@ -75,7 +75,7 @@ class MainApp:
 
         # Timing and Control Variables
         self.last_action_time = 0       # For debouncing major actions (slide change, screenshot, etc.)
-        self.action_cooldown = 0.7      # Cooldown in seconds for major actions
+        self.action_cooldown = 1.2     # Cooldown in seconds for major actions
         self.last_color_change_time = 0 # Specific cooldown for color change
         self.color_change_delay = 0.7   # Cooldown for color change
         self.last_draw_action_time = 0  # Tracks continuity for drawing/erasing
@@ -89,7 +89,7 @@ class MainApp:
         self.timer = QTimer()
         self.timer.timeout.connect(self.process_frame)
         # Timer interval (milliseconds). Lower value = higher FPS attempt, more CPU. 33ms = ~30fps, 20ms = ~50fps
-        self.TIMER_INTERVAL_MS = 30
+        self.TIMER_INTERVAL_MS = 20
         self.timer.start(self.TIMER_INTERVAL_MS)
 
         logging.info("MainApp initialized successfully.")
